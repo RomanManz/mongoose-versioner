@@ -1,0 +1,25 @@
+{
+  "name": "mongoose-versioner",
+  "version": "0.1.0",
+  "description": "Document versioning plugin for Mongoose",
+  "main": "index.js",
+  "dependencies": {
+    "mongoose" : "3.5.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jamesor/mongoose-versioner"
+  },
+  "homepage" : "https://github.com/jamesor/mongoose-versioner",
+  "keywords": [
+    "mongoose",
+    "plugin",
+    "version"
+  ],
+  "author": {
+    "name": "James O'Reilly",
+    "email": "james@jamesor.com",
+    "url": "https://github.com/jamesor/"
+  },
+  "licence": "MIT"
+}

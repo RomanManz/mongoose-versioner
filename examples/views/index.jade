@@ -1,0 +1,20 @@
+extends layout
+
+block content
+  h1 Stories
+  button(onclick="document.location.href='/story'") Create New Story
+
+  table
+    thead
+      tr
+        th Title
+        th Created
+        th Updated
+    tbody
+      - for item, i in stories
+        - item = item.toObject()
+          tr
+            td.title
+              a(href="/story/#{item._id}/v/#{item.versionId}") #{item.title}
+            td.timestamp= item.created
+            td.timestamp= item.updated

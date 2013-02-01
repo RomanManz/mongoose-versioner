@@ -1,0 +1,47 @@
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+a {
+  color: #00B7FF;
+}
+table {
+    border-collapse: collapse;
+}
+table, th, td {
+    border: 1px solid black;
+}
+tr.selected {
+    background-color: #ffffe0;
+}
+th {
+    background-color: gray;
+    color: white;
+    font-size: 11px;
+}
+td {
+    font-size: 12px;
+    height: 25px;
+    padding: 0 5px;
+}
+th.version {
+    width: 200px;
+}
+th.timestamp {
+    width: 300px;
+}
+td.timestamp {
+    font-family: consolas;
+}
+td.actions button {
+    width: 75px;
+}
+td.actions button:first-child {
+    margin-right: 5px;
+}
+form div {
+    margin-top: 10px;
+}
+form div.itemId span {
+    color: #a9a9a9;
+}

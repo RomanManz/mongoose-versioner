@@ -1,0 +1,36 @@
+{
+    "name": "mongoose-versioner-example",
+    "version": "0.0.1",
+    "description": "Example use of the document versioning plugin for Mongoose",
+    "main": "./app.js",
+    "scripts": {
+        "start": "node app"
+    },
+    "dependencies": {
+        "async"      : "0.1.22",
+        "express"    : "3.1.0",
+        "http"       : "*",
+        "jade"       : "0.28.1",
+        "mongoose"   : "3.5.2",
+        "node-uuid"  : "1.4.0",
+        "path"       : "0.4.9",
+        "underscore" : "1.4.4"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/jamesor/mongoose-versioner"
+    },
+    "homepage" : "https://github.com/jamesor/mongoose-versioner",
+    "keywords": [
+        "mongoose",
+        "plugin",
+        "version"
+    ],
+    "readmeFilename": "README.md",
+    "author": {
+        "name": "James O'Reilly",
+        "email": "james@jamesor.com",
+        "url": "https://github.com/jamesor/"
+    },
+    "licence": "MIT"
+}

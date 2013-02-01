@@ -1,0 +1,59 @@
+extends layout
+
+block head-scripts
+  script(src='/javascripts/story.js')
+
+block content
+  button(onclick="document.location.href='/'") Back to Document List
+
+  h1= title
+
+
+  form(method="post")
+    div.itemId
+      label(for="Id") Id:
+      span #{item._id}
+    div
+      label(for="title") Title
+      br
+      input(type="text", name="title", maxlength="100", size="80", value="#{item.title}")
+    div
+      label(for="deck") Deck
+      br
+      textarea(name="deck", rows="20", cols="80")= item.deck
+    div
+      -if (item._id == '')
+        input(type="submit", value="Create New Story")
+        input(type="reset", value="Clear Form")
+      -else
+        input(type="submit", value="Save Changes")
+        input(type="reset", value="Revert Changes")
+        button(name="saveAsNewVersion", value="true") Save Changes as New Version
+  -if (typeof versions != 'undefined' && typeof versions.docs !== 'undefined' && versions.docs.length > 0)
+    h2 Versions List
+    table
+      thead
+        tr
+          th.version Version Id
+          th.timestamp Last Modified
+          th.actions Actions
+      tbody
+        -var action, isActive, isSelected, trClass, version, i
+        -for version, i in versions.docs
+          -action = '/story/' + version.versionOfId + '/v/' + version._id
+          -isActive = (versions.activeId.toString() == version._id.toString())
+          -isSelected = (version._id.toString() == selectedId)
+          -trClass = (isSelected) ? 'selected' : ''
+          tr(id=version._id, class=trClass)
+            td.version
+              -if (isSelected)
+                | #{version._id}
+              -else
+                a(href=action)= version._id
+            td.timestamp= version.updated
+            td.actions
+              -if (isActive)
+                | &lt;- Active Version
+              -else
+                button(onclick='document.location.href="#{action}/activate"') Activate
+                button(onclick='deleteVersion("#{version._id}", "#{action}")') Delete
