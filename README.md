@@ -33,21 +33,21 @@ module.exports = mongoose.model('Foo', FooSchema);
 ## API
 
 ### Options
-- modelName : the name of the collection you are versioning.  This
-will be used to name the shadow collection.
-- mongoose : a reference to the mongoose object
+- *modelName* : the name of the collection you are versioning.  This
+will be used to name the shadow collection (required)
+- *mongoose* : a reference to the mongoose object (required)
 
 ### Instance Methods added to the original schema:
 - findVersions(callback) returns all versions of this document
 
 ### Static Methods added to the original schema:
-- findVersionById(id, fields, options, callback) returns a document version
+- *findVersionById*(id, fields, options, callback) returns a document version
   matching the id in the shadow collection
-- findVersions(id, fields, options, callback) returns all document versions
+- *findVersions*(id, fields, options, callback) returns all document versions
   matching the id of the active document in original collection
-- saveVersion(dataObj, callback) saves a document as a version
-- deleteVersion(id, callback) deletes a document version
-- activateVersion(id, callback) make a document version the active version
+- *saveVersion*(dataObj, callback) saves a document as a version
+- *deleteVersion*(id, callback) deletes a document version
+- *activateVersion*(id, callback) make a document version the active version
 
 NOTE: When using this plugin it is expected that all public facing queries
 would be performed on your models using mongoose in the traditional
