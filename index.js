@@ -34,13 +34,13 @@ module.exports = function (schema, options) {
   'use strict';
 
   if (!options || !options.mongoose) {
-    console.log('mongoose-versioner requires mongoose to be passed in as an options reference.');
-    return;
+    throw new Error('mongoose-versioner requires mongoose to be passed in as an options reference.');
   }
 
   var mongoose = options.mongoose
     , Schema = mongoose.Schema
     , modelName = options.modelName
+    , shadowName = modelName + 'Shadow'
     , fields = {}
     , versionIdPath = options.versionIdPath || 'versionId'
     , shadowFields = {}
@@ -64,8 +64,16 @@ module.exports = function (schema, options) {
   }
   schema.add(fields);
 
-  var shadowSchema = new mongoose.Schema(shadowFields),
-    shadowModel = mongoose.model(modelName + 'Shadow', shadowSchema);
+  var shadowSchema = new mongoose.Schema(shadowFields);
+
+  function getShadowModel(conn) {
+    try {
+      var mdl = conn.model(shadowName);
+      return mdl;
+    } catch(e) {
+      return conn.model(shadowName, shadowSchema);
+    }
+  }
 
   //-------------------------------------------------------------------------
   // Instance Methods
@@ -81,8 +89,11 @@ module.exports = function (schema, options) {
    * @return {Query}
    */
   schema.methods.findVersions = function (callback) {
-    var filter = {};
+    var shadowModel = getShadowModel(this.__proto__),
+      filter = {};
+
     filter[versionOfIdPath] = this._id;
+
     return shadowModel.find(filter, function (err, result) {
       callback(err, result);
     });
@@ -104,6 +115,8 @@ module.exports = function (schema, options) {
    * @return {Query}
    */
   schema.statics.findVersionById = function (id, fields, options, callback) {
+    var shadowModel = getShadowModel(this.base);
+
     return shadowModel.findById(id, fields, options, callback);
   };
 
@@ -119,7 +132,9 @@ module.exports = function (schema, options) {
    * @param {Function} callback
    */
   schema.statics.findVersions = function (id, fields, options, callback) {
-    var model = mongoose.model(modelName),
+
+    var model = this.base.model(modelName),
+      shadowModel = getShadowModel(this.base),
       returnObj = {
         activeId:null,
         docs:[]
@@ -127,22 +142,26 @@ module.exports = function (schema, options) {
 
     model.findById(id, fields, options, function (err, activeDoc) {
       if (err) {
-        callback(err);
-      } else if (activeDoc === null) {
-        callback(err, returnObj);
-      } else {
-        returnObj.activeId = activeDoc[versionIdPath];
-        var filter = {};
-        filter[versionOfIdPath] = activeDoc._id;
-        shadowModel.find(filter, fields, options, function (err, result) {
-          if (err) {
-            callback(err);
-          } else {
-            returnObj.docs = result;
-            callback(err, returnObj);
-          }
-        });
+        return callback(err);
       }
+
+      if (activeDoc === null) {
+        return callback(err, returnObj);
+      }
+
+      returnObj.activeId = activeDoc[versionIdPath];
+
+      var filter = {};
+      filter[versionOfIdPath] = activeDoc._id;
+      shadowModel.find(filter, fields, options, function (err, result) {
+        if (err) {
+          return callback(err);
+        }
+
+        returnObj.docs = result;
+        callback(err, returnObj);
+      });
+
     });
   };
 
@@ -163,70 +182,75 @@ module.exports = function (schema, options) {
    */
   schema.statics.saveVersion = function (dataObj, callback) {
 
+    var model = this.base.model(modelName),
+      shadowModel = getShadowModel(this.base);
+
+
     // 1) First look to see if this document exists
     shadowModel.findById(dataObj.versionId, function (err, result) {
       if (err) {
-        callback(err);
-      } else {
-        var versDoc = result;
-        if (versDoc === null) {
-          // Document doesn't exist so create a new one
-          versDoc = new shadowModel(dataObj.data);
-        } else {
-          // Document does exist so copy data to it
-          for (var key in dataObj.data) {
-            versDoc[key] = dataObj.data[key];
-          }
-        }
-        versDoc.versionOfId = dataObj.versionOfId || null;
-        // 2) Save this as a Version
-        versDoc.save(function (err, versSaved) {
-          if (err) {
-            callback(err);
-          } else {
-            var versDocObj = versSaved.toObject(),
-              model = mongoose.model(modelName);
-            // 2) Lookup the Active version
-            model.findById(dataObj.versionOfId, function (err, original) {
-              if (err) {
-                callback(err);
-              } else {
-                // 3) If the Active version doesn't exist, create a new object
-                if (original === null) {
-                  original = new model();
-                  original[versionIdPath] = versSaved._id;
-                }
-                // 4) If the Active version is the Version we are editing, then update it
-                if (original[versionIdPath].toString() == versSaved._id.toString()) {
-                  // 4a) Copy all of the properties from the Version to the Active document
-                  var versDocObj = versSaved.toObject();
-                  for (var key in versDocObj) {
-                    if (key !== '_id' && key !== versionOfIdPath) {
-                      original[key] = versDocObj[key];
-                    }
-                  }
-                  // 4b) Save the Active document with the newly updated props
-                  original.save(function (err, originalSaved) {
-                    if (err) {
-                      callback(err);
-                    } else if (versDocObj[versionOfIdPath] !== originalSaved._id) {
-                      // 5) If this was a new document save Version again with ref to Active document
-                      versSaved[versionOfIdPath] = originalSaved._id;
-                      versSaved.save(function (err, versSavedAgain) {
-                        callback(err, versSavedAgain);
-                      });
-                    } else {
-                      callback(null, versSaved);
-                    }
-                  });
-                } else {
-                  callback(null, versSaved);
-                }
-              }
-            });
-          }
-        });
+        return callback(err);
       }
+      var versDoc = result;
+      if (versDoc === null) {
+        // Document doesn't exist so create a new one
+        versDoc = new shadowModel(dataObj.data);
+      } else {
+        // Document does exist so copy data to it
+        for (var key in dataObj.data) {
+          versDoc[key] = dataObj.data[key];
+        }
+      }
+      versDoc.versionOfId = dataObj.versionOfId || null;
+      // 2) Save this as a Version
+      versDoc.save(function (err, versSaved) {
+
+        if (err) {
+          return callback(err);
+        }
+
+        var versDocObj = versSaved.toObject();
+
+        // 2) Lookup the Active version
+        model.findById(dataObj.versionOfId, function (err, original) {
+
+          if (err) {
+            return callback(err);
+          }
+
+          // 3) If the Active version doesn't exist, create a new object
+          if (original === null) {
+            original = new model();
+            original[versionIdPath] = versSaved._id;
+          }
+          // 4) If the Active version is the Version we are editing, then update it
+          if (original[versionIdPath].toString() != versSaved._id.toString()) {
+            return callback(null, versSaved);
+          }
+
+          // 4a) Copy all of the properties from the Version to the Active document
+          var versDocObj = versSaved.toObject();
+          for (var key in versDocObj) {
+            if (key !== '_id' && key !== versionOfIdPath) {
+              original[key] = versDocObj[key];
+            }
+          }
+          // 4b) Save the Active document with the newly updated props
+          original.save(function (err, originalSaved) {
+
+            if (err || versDocObj[versionOfIdPath] === originalSaved._id) {
+              return callback(err);
+            }
+
+            // 5) If this was a new document save Version again with ref to Active document
+            versSaved[versionOfIdPath] = originalSaved._id;
+            versSaved.save(function (err, versSavedAgain) {
+              callback(err, versSavedAgain);
+            });
+
+          });
+        });
+      });
     });
   };
 
@@ -244,35 +268,41 @@ module.exports = function (schema, options) {
    * @param {Function} callback
    */
   schema.statics.deleteVersion = function (id, callback) {
-    var model = mongoose.model(modelName),
+    var model = this.base.model(modelName),
+      shadowModel = getShadowModel(this.base),
       filter = {};
 
     // 1) Check to see if this Version is an Active document
     filter[versionIdPath] = id;
     model.findOne(filter, function (err, result) {
       if (err) {
-        callback(err);
-      } else if (result === null) {
-        // 2a) Document not found so it's not Active.  Safe to delete.
-        shadowModel.findById(id, function (err, version) {
-          if (err) {
-            callback(err);
-          } else if (version === null) {
-            callback(null, {'success':false});
-          } else {
-            version.remove(function (err, version) {
-              if (err) {
-                callback(err);
-              } else {
-                callback(null, {'success':true});
-              }
-            });
-          }
-        });
-      } else {
-        // 2b) Document found so it must be Active and therefore not safe to delete.
-        callback(null, {'success':false});
+        return callback(err);
       }
+
+      if (result !== null) {
+        // 2b) Document found so it must be Active and therefore not safe to delete.
+        return callback(null, {'success':false});
+      }
+
+      // 2a) Document not found so it's not Active.  Safe to delete.
+      shadowModel.findById(id, function (err, version) {
+        if (err) {
+          return callback(err);
+        }
+
+        if (version === null) {
+          return callback(null, {'success':false});
+        }
+
+        version.remove(function (err, version) {
+          if (err) {
+            return callback(err);
+          }
+
+          return callback(null, {'success':true});
+        });
+
+      });
     });
   };
 
@@ -287,36 +317,44 @@ module.exports = function (schema, options) {
    * @param {Function} callback
    */
   schema.statics.activateVersion = function (id, callback) {
+    var model = this.base.model(modelName),
+      shadowModel = getShadowModel(this.base);
+
     // 1) First look to see if this document exists
     shadowModel.findById(id, function (err, result) {
       if (err) {
-        callback(err);
-      } else if (result === null) {
-        callback({'success':false});
-      } else {
-        var model = mongoose.model(modelName);
-        // 2) Find the Active document
-        model.findById(result[versionOfIdPath], function (err, active) {
-          if (err) {
-            callback(err);
-          } else if (active === null) {
-            callback({'success':false});
-          } else {
-            // 3) Copy all of the properties from the Version to the Active document
-            var versDocObj = result.toObject();
-            for (var key in versDocObj) {
-              if (key !== '_id' && key !== versionOfIdPath) {
-                active[key] = versDocObj[key];
-              }
-            }
-            // 4) Set the version pointer to the Version we are activating
-            active[versionIdPath] = id;
-            active.save(function (err, activeSaved) {
-              callback(err, activeSaved);
-            });
-          }
-        });
+        return callback(err);
       }
+
+      if (result === null) {
+        return callback({'success':false});
+      }
+
+      // 2) Find the Active document
+      model.findById(result[versionOfIdPath], function (err, active) {
+        if (err) {
+          return callback(err);
+        }
+
+        if (active === null) {
+          return callback({'success':false});
+        }
+
+        // 3) Copy all of the properties from the Version to the Active document
+        var versDocObj = result.toObject();
+        for (var key in versDocObj) {
+          if (key !== '_id' && key !== versionOfIdPath) {
+            active[key] = versDocObj[key];
+          }
+        }
+        // 4) Set the version pointer to the Version we are activating
+        active[versionIdPath] = id;
+        active.save(function (err, activeSaved) {
+          return callback(err, activeSaved);
+        });
+
+      });
+
     });
   };
 };
