@@ -89,7 +89,7 @@ module.exports = function (schema, options) {
    * @return {Query}
    */
   schema.methods.findVersions = function (callback) {
-    var shadowModel = getShadowModel(this.__proto__),
+    var shadowModel = getShadowModel(this.db),
       filter = {};
 
     filter[versionOfIdPath] = this._id;
