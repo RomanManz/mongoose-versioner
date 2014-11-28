@@ -1,7 +1,12 @@
 /**
- * Mongoose Versioner Plugin
+ * # Mongoose Versioner Plugin
  *
- * Adds the ability to version a document.  All document versions are
+ * version: 0.2
+ *
+ * ## Introduction
+ *
+ * This is a Mongoose plugin that, when applied to a model,
+ * adds the ability to version a document. All document versions are
  * stored in a shadow collection with a shallow clone of the active
  * version's data residing in the original model.
  *
@@ -10,22 +15,59 @@
  * through the use of static methods added to the model's schema
  * by this plugin.
  *
- * Property added to the original schema:
- * + versionId {ObjectId} Id of the active version in the shadow collection
+ * Support multiple mongoose instances.
  *
- * Instance Methods added to the original schema:
- * + findVersions - returns all versions of this document
+ * Properties added to the original schema:
+ * * versionId {ObjectId} Id of the active version in the shadow collection
+ *
+ * Instance methods added to the original schema:
+ * * findVersions - returns all versions of this document
  *
  * Static Methods added to the original schema:
- * + findVersionById - returns a document version matching the id
- * + findVersions - returns all document versions matching query
- * + saveVersion - saves a document as a version
- * + deleteVersion - deletes a document version
- * + activateVersion - make a document version the active version
+ * * findVersionById - returns a document version matching the id in the shadow collection
+ * * findVersions - returns all document versions matching the id of the active document in original collection
+ * * saveVersion - saves a document as a version
+ * * deleteVersion - deletes a document version
+ * * activateVersion - make a document version the active version
  *
- * Property added to the shadow schema:
- * + versionOfId {ObjectId} Id of the document this version is linked to
+ * Properties added to the shadow schema:
+ * * versionOfId {ObjectId} Id of the document this version is linked to
  *
+ * ## Usage
+ * Install the plugin on the model you want to version.
+ *
+ * ```js
+ * // models/foo.js
+ *
+ * var mongoose = require('mongoose')
+ *   , versioner = require('mongoose-versioner')
+ *   , FooSchema = new mongoose.Schema({
+ *     title: {'type': String, 'default': 'Untitled'},
+ *   });
+ *
+ * FooSchema.plugin(versioner, {modelName:'Foo', mongoose:mongoose});
+ *
+ * module.exports = mongoose.model('Foo', FooSchema);
+ * ```
+ *
+ * Versioner options
+ * ```js
+ * {
+ *   // (required)
+ *   // the name of the collection you are versioning.
+ *   // This will be used to name the shadow collection
+ *   // Must be the same used in mongoose.model call
+ *   modelName : String,
+ *   // (required)
+ *   // a reference to the mongoose object
+ *   mongoose : require("mongoose")
+ * }
+ * ```
+ *
+ * ## API
+ */
+
+/*
  * @param {Schema} schema
  * @param {Object} options
  */
@@ -54,14 +96,19 @@ module.exports = function (schema, options) {
   });
 
   // versionOfId holds a reference to the original document being versioned
-  if (!shadowFields[versionOfIdPath]) {
-    shadowFields[versionOfIdPath] = {type:Schema.ObjectId};
+  if (shadowFields[versionOfIdPath]) {
+    throw new Error('options.versionOfIdPath [' + versionOfIdPath + '] must not be declared in the schema');
   }
 
+  shadowFields[versionOfIdPath] = {type: Schema.ObjectId};
+
   // versionId holds a reference to the versioned document that is "active"
-  if (!schema.paths[versionIdPath]) {
-    fields[versionIdPath] = {type:Schema.ObjectId};
+  if (schema.paths[versionIdPath]) {
+    throw new Error('options.versionIdPath [' + versionIdPath + '] must be declared in the schema by mongoose-versioner');
   }
+
+  fields[versionIdPath] = {type: Schema.ObjectId};
+
   schema.add(fields);
 
   var shadowSchema = new mongoose.Schema(shadowFields);
@@ -80,7 +127,7 @@ module.exports = function (schema, options) {
   //
 
   /**
-   * findVersions
+   * (@instance).findVersions
    *
    * When you have an instance to a document, calling this instance method
    * will return a list of document versions available for this document.
@@ -88,7 +135,7 @@ module.exports = function (schema, options) {
    * @param callback
    * @return {Query}
    */
-  schema.methods.findVersions = function (callback) {
+  function findVersions(callback) {
     var shadowModel = getShadowModel(this.db),
       filter = {};
 
@@ -98,13 +145,14 @@ module.exports = function (schema, options) {
       callback(err, result);
     });
   };
+  schema.methods.findVersions = findVersions;
 
   //-------------------------------------------------------------------------
   // Class Methods
   //
 
   /**
-   * findVersionById
+   * (@model).findVersionById
    *
    * Returns a specific document version by Id
    *
@@ -114,24 +162,26 @@ module.exports = function (schema, options) {
    * @param {Function} callback
    * @return {Query}
    */
-  schema.statics.findVersionById = function (id, fields, options, callback) {
+  function findVersionById(id, fields, options, callback) {
     var shadowModel = getShadowModel(this.base);
 
     return shadowModel.findById(id, fields, options, callback);
   };
+  schema.statics.findVersionById = findVersionById;
 
   /**
-   * findVersions
+   * (@model).findVersions
    *
    * Returns a collection of document versions that
    * are linked as to the document with the passed in Id.
    *
    * @param {ObjectId} id   The Id of the active document in the original schema
-   * @param fields
-   * @param options
+   * @param {Object} fields query
+   * @param {Object} options
    * @param {Function} callback
+   * @return {Model} this
    */
-  schema.statics.findVersions = function (id, fields, options, callback) {
+  function findVersions(id, fields, options, callback) {
 
     var model = this.base.model(modelName),
       shadowModel = getShadowModel(this.base),
@@ -161,14 +211,37 @@ module.exports = function (schema, options) {
         returnObj.docs = result;
         callback(err, returnObj);
       });
-
     });
+
+    return this;
   };
+  schema.statics.findVersions = findVersions;
+  /**
+   * (@model).saveNewVersionOf
+   *
+   * Shortcut to saveVersion
+   *
+   * @param {ObjectId} versionOfId
+   * @param {Object|Model} dataObj    The data to save
+   * @param {Function} callback
+   * @return {Model} this
+   */
+  function saveNewVersionOf(versionOfId, data, callback) {
+    var dataObj = {
+      data: data,
+      // always create a new version?
+      versionId: null,
+      versionOfId: versionOfId
+    };
+
+    return this.saveVersion(dataObj, callback);
+  };
+  schema.statics.saveNewVersionOf = saveNewVersionOf;
 
   /**
-   * saveVersion
+   * (@model).saveVersion
    *
-   * NOTE: This function should be used to save all documents in place of
+   * **NOTE**: This function should be used to save all documents in place of
    * the original schema's save() method.
    *
    * This function will first check to see if the document exists in
@@ -177,28 +250,47 @@ module.exports = function (schema, options) {
    * Then, using this document reference, also create a version and store
    * it in the shadow collection linking it back to this reference.
    *
+   * **dataObj**
+   * ```js
+   * {
+   *   // data that will be stored, model
+   *   data: data,
+   *   // null - to create a new version
+   *   // ObjectId - overwrite given version
+   *   versionId: null,
+   *   versionOfId: original_doc._id
+   * }
+   * ```
+   *
    * @param {Object} dataObj    The data to save
    * @param {Function} callback
+   * @return {Model} this
    */
-  schema.statics.saveVersion = function (dataObj, callback) {
+  function saveVersion(dataObj, callback) {
 
     var model = this.base.model(modelName),
       shadowModel = getShadowModel(this.base);
 
 
     // 1) First look to see if this document exists
-    shadowModel.findById(dataObj.versionId, function (err, result) {
+    shadowModel.findById(dataObj.versionId, function (err, versDoc) {
       if (err) {
         return callback(err);
       }
-      var versDoc = result;
+
+      // is data a model? then toObject will be defined as function.
+      var data = dataObj.data;
+      if ("function" === data.toObject) {
+        data = data.toObject();
+      }
+
       if (versDoc === null) {
         // Document doesn't exist so create a new one
-        versDoc = new shadowModel(dataObj.data);
+        versDoc = new shadowModel(data);
       } else {
         // Document does exist so copy data to it
-        for (var key in dataObj.data) {
-          versDoc[key] = dataObj.data[key];
+        for (var key in data) {
+          versDoc[key] = data[key];
         }
       }
       versDoc.versionOfId = dataObj.versionOfId || null;
@@ -224,7 +316,7 @@ module.exports = function (schema, options) {
             original[versionIdPath] = versSaved._id;
           }
           // 4) If the Active version is the Version we are editing, then update it
-          if (original[versionIdPath].toString() != versSaved._id.toString()) {
+          if (original[versionIdPath].toString() !== versSaved._id.toString()) {
             return callback(null, versSaved);
           }
 
@@ -252,10 +344,13 @@ module.exports = function (schema, options) {
         });
       });
     });
+
+    return this;
   };
+  schema.statics.saveVersion = saveVersion;
 
   /**
-   * deleteVersion
+   * (@model).deleteVersion
    *
    * This function will delete a document version from the shadow
    * collection provided it isn't linked as the active document.
@@ -266,8 +361,9 @@ module.exports = function (schema, options) {
    *
    * @param {ObjectId} id   The Id of the document version to delete
    * @param {Function} callback
+   * @return {Model} this
    */
-  schema.statics.deleteVersion = function (id, callback) {
+  function deleteVersion(id, callback) {
     var model = this.base.model(modelName),
       shadowModel = getShadowModel(this.base),
       filter = {};
@@ -304,10 +400,13 @@ module.exports = function (schema, options) {
 
       });
     });
+
+    return this;
   };
+  schema.statics.deleteVersion = deleteVersion;
 
   /**
-   * activateVersion
+   * (@model).activateVersion
    *
    * This function will set a document version as the active version
    * by cloning it's data to the original collection and updating the
@@ -315,8 +414,9 @@ module.exports = function (schema, options) {
    *
    * @param {ObjectId} id   The Id of the version document to activate
    * @param {Function} callback
+   * @return {Model} this
    */
-  schema.statics.activateVersion = function (id, callback) {
+  function activateVersion(id, callback) {
     var model = this.base.model(modelName),
       shadowModel = getShadowModel(this.base);
 
@@ -341,8 +441,10 @@ module.exports = function (schema, options) {
         }
 
         // 3) Copy all of the properties from the Version to the Active document
-        var versDocObj = result.toObject();
-        for (var key in versDocObj) {
+        var versDocObj = result.toObject(),
+          key;
+
+        for (key in versDocObj) {
           if (key !== '_id' && key !== versionOfIdPath) {
             active[key] = versDocObj[key];
           }
@@ -356,5 +458,8 @@ module.exports = function (schema, options) {
       });
 
     });
+
+    return this;
   };
+  schema.statics.activateVersion = activateVersion;
 };

@@ -1,67 +1,211 @@
-# Mongoose-Versioner
 
-version: 0.1.1
+# Mongoose Versioner Plugin
+
+version: 0.2
 
 ## Introduction
 
-This is a Mongoose plugin that, when applied to a model, will provide
-the ability to create multiple versions of a document and set one of
-the versions as the active document.
+This is a Mongoose plugin that, when applied to a model,
+adds the ability to version a document. All document versions are
+stored in a shadow collection with a shallow clone of the active
+version's data residing in the original model.
 
-All of the document versions are stored in a dynamically created shadow
-collection and the active document is stored in your originally created
-collection.
+The original model is queried as normal when searching for
+documents.  The shadow collection is only used by your CRUD system
+through the use of static methods added to the model's schema
+by this plugin.
+
+Support multiple mongoose instances.
+
+Properties added to the original schema:
+* versionId {ObjectId} Id of the active version in the shadow collection
+
+Instance methods added to the original schema:
+* findVersions - returns all versions of this document
+
+Static Methods added to the original schema:
+* findVersionById - returns a document version matching the id in the shadow collection
+* findVersions - returns all document versions matching the id of the active document in original collection
+* saveVersion - saves a document as a version
+* deleteVersion - deletes a document version
+* activateVersion - make a document version the active version
+
+Properties added to the shadow schema:
+* versionOfId {ObjectId} Id of the document this version is linked to
 
 ## Usage
-
 Install the plugin on the model you want to version.
 
-```
+```js
 // models/foo.js
 
 var mongoose = require('mongoose')
-  , versioner = require('mongoose-versioner')
-  , FooSchema = new mongoose.Schema({
-    title: {'type': String, 'default': 'Untitled'},
-  });
+, versioner = require('mongoose-versioner')
+, FooSchema = new mongoose.Schema({
+title: {'type': String, 'default': 'Untitled'},
+});
 
 FooSchema.plugin(versioner, {modelName:'Foo', mongoose:mongoose});
 
 module.exports = mongoose.model('Foo', FooSchema);
 ```
 
+Versioner options
+```js
+{
+// (required)
+// the name of the collection you are versioning.
+// This will be used to name the shadow collection
+// Must be the same used in mongoose.model call
+modelName : String,
+// (required)
+// a reference to the mongoose object
+mongoose : require("mongoose")
+}
+```
+
 ## API
+ 
 
-### Options
-- *modelName* : the name of the collection you are versioning.  This
-will be used to name the shadow collection (required)
-- *mongoose* : a reference to the mongoose object (required)
 
-### Instance Methods added to the original schema:
-- findVersions(callback) returns all versions of this document
+##### `findVersions` (ObjectId:id, Object:fields, Object:options, Function:callback)
 
-### Static Methods added to the original schema:
-- *findVersionById*(id, fields, options, callback) returns a document version
-  matching the id in the shadow collection
-- *findVersions*(id, fields, options, callback) returns all document versions
-  matching the id of the active document in original collection
-- *saveVersion*(dataObj, callback) saves a document as a version
-- *deleteVersion*(id, callback) deletes a document version
-- *activateVersion*(id, callback) make a document version the active version
+(@model).findVersions
 
-NOTE: When using this plugin it is expected that all public facing queries
-would be performed on your models using mongoose in the traditional
-way.  These static methods are for you to use in your CMS when content
-creators are editing their documents.
 
-## Todo
 
-- API documentation
-- Add test scripts
+Returns a collection of document versions that
 
-## License
+are linked as to the document with the passed in Id.
 
-Copyright (c) 2013 James O'Reilly &lt;james@jamesor.com&gt;
+* `id`: The Id of the active document in the original schema
+
+* `fields`: query
+
+
+
+##### `findVersionById` (ObjectId:id, fields, options, Function:callback)
+
+(@model).findVersionById
+
+
+
+Returns a specific document version by Id
+
+* `id`: The Id of the document in the shadow schema
+
+
+
+##### `saveNewVersionOf` (ObjectId:versionOfId, data, Function:callback)
+
+(@model).saveNewVersionOf
+
+
+
+Shortcut to saveVersion
+
+* `dataObj`: The data to save
+
+
+
+##### `saveVersion` (Object:dataObj, Function:callback)
+
+(@model).saveVersion
+
+
+
+**NOTE**: This function should be used to save all documents in place of
+
+the original schema's save() method.
+
+
+
+This function will first check to see if the document exists in
+
+the original schema and create it there if it does not.
+
+
+
+Then, using this document reference, also create a version and store
+
+it in the shadow collection linking it back to this reference.
+
+
+
+**dataObj**
+
+```js
+
+{
+
+  // data that will be stored, model
+
+  data: data,
+
+  // null - to create a new version
+
+  // ObjectId - overwrite given version
+
+  versionId: null,
+
+  versionOfId: original_doc._id
+
+}
+
+```
+
+* `dataObj`: The data to save
+
+
+
+##### `deleteVersion` (ObjectId:id, Function:callback)
+
+(@model).deleteVersion
+
+
+
+This function will delete a document version from the shadow
+
+collection provided it isn't linked as the active document.
+
+
+
+An object will be passed to the callback function with a
+
+'success' property with the value true if it deleted the
+
+version and false if it did not.
+
+* `id`: The Id of the document version to delete
+
+
+
+##### `activateVersion` (ObjectId:id, Function:callback)
+
+(@model).activateVersion
+
+
+
+This function will set a document version as the active version
+
+by cloning it's data to the original collection and updating the
+
+active version pointer.
+
+* `id`: The Id of the version document to activate
+
+
+
+# TODO
+
+* Add test scripts (PR welcome)
+
+
+# LICENSE
+
+(The MIT License)
+
+Copyright (c) 2013 James O'Reilly <james@jamesor.com> until 0.1.1
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -81,3 +225,4 @@ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
 CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
