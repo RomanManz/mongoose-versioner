@@ -132,10 +132,11 @@ module.exports = function (schema, options) {
    * When you have an instance to a document, calling this instance method
    * will return a list of document versions available for this document.
    *
-   * @param callback
+   * @name findVersions
+   * @param {Function} callback
    * @return {Query}
    */
-  function findVersions(callback) {
+  function instanceFindVersions(callback) {
     var shadowModel = getShadowModel(this.db),
       filter = {};
 
@@ -145,7 +146,7 @@ module.exports = function (schema, options) {
       callback(err, result);
     });
   };
-  schema.methods.findVersions = findVersions;
+  schema.methods.findVersions = instanceFindVersions;
 
   //-------------------------------------------------------------------------
   // Class Methods
@@ -157,8 +158,8 @@ module.exports = function (schema, options) {
    * Returns a specific document version by Id
    *
    * @param {ObjectId} id   The Id of the document in the shadow schema
-   * @param fields
-   * @param options
+   * @param {Object} fields optional fields to select (forwarded to findById)
+   * @param {Object} options (forwarded to findById)
    * @param {Function} callback
    * @return {Query}
    */
@@ -176,8 +177,8 @@ module.exports = function (schema, options) {
    * are linked as to the document with the passed in Id.
    *
    * @param {ObjectId} id   The Id of the active document in the original schema
-   * @param {Object} fields query
-   * @param {Object} options
+   * @param {Object} fields optional fields to select (forwarded to findById)
+   * @param {Object} options (forwarded to findById)
    * @param {Function} callback
    * @return {Model} this
    */
@@ -219,7 +220,7 @@ module.exports = function (schema, options) {
   /**
    * (@model).saveNewVersionOf
    *
-   * Shortcut to saveVersion
+   * Shorthand to saveVersion
    *
    * @param {ObjectId} versionOfId
    * @param {Object|Model} dataObj    The data to save
@@ -262,7 +263,7 @@ module.exports = function (schema, options) {
    * }
    * ```
    *
-   * @param {Object} dataObj    The data to save
+   * @param {Object} dataObj The data to save
    * @param {Function} callback
    * @return {Model} this
    */

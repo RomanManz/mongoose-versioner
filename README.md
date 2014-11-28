@@ -68,7 +68,55 @@ mongoose : require("mongoose")
  
 
 
-##### `findVersions` (ObjectId:id, Object:fields, Object:options, Function:callback)
+##### `findVersions` (Function:callback) -> undefined
+
+(@instance).findVersions
+
+
+
+When you have an instance to a document, calling this instance method
+
+will return a list of document versions available for this document.
+
+**Parameters:**
+
+* `callback`
+
+
+**Returns:**
+
+* `Query`
+
+
+
+
+##### `findVersionById` (ObjectId:id, Object:fields, Object:options, Function:callback) -> undefined
+
+(@model).findVersionById
+
+
+
+Returns a specific document version by Id
+
+**Parameters:**
+
+* `id`: The Id of the document in the shadow schema
+
+* `fields`: optional fields to select (forwarded to findById)
+
+* `options`: (forwarded to findById)
+
+* `callback`
+
+
+**Returns:**
+
+* `Query`
+
+
+
+
+##### `findVersions` (ObjectId:id, Object:fields, Object:options, Function:callback) -> undefined
 
 (@model).findVersions
 
@@ -78,37 +126,49 @@ Returns a collection of document versions that
 
 are linked as to the document with the passed in Id.
 
+**Parameters:**
+
 * `id`: The Id of the active document in the original schema
 
-* `fields`: query
+* `fields`: optional fields to select (forwarded to findById)
+
+* `options`: (forwarded to findById)
+
+* `callback`
+
+
+**Returns:**
+
+* `Model`: this
 
 
 
-##### `findVersionById` (ObjectId:id, fields, options, Function:callback)
 
-(@model).findVersionById
-
-
-
-Returns a specific document version by Id
-
-* `id`: The Id of the document in the shadow schema
-
-
-
-##### `saveNewVersionOf` (ObjectId:versionOfId, data, Function:callback)
+##### `saveNewVersionOf` (ObjectId:versionOfId, data, Function:callback) -> undefined
 
 (@model).saveNewVersionOf
 
 
 
-Shortcut to saveVersion
+Shorthand to saveVersion
+
+**Parameters:**
+
+* `versionOfId`
 
 * `dataObj`: The data to save
 
+* `callback`
 
 
-##### `saveVersion` (Object:dataObj, Function:callback)
+**Returns:**
+
+* `Model`: this
+
+
+
+
+##### `saveVersion` (Object:dataObj, Function:callback) -> undefined
 
 (@model).saveVersion
 
@@ -154,11 +214,21 @@ it in the shadow collection linking it back to this reference.
 
 ```
 
+**Parameters:**
+
 * `dataObj`: The data to save
 
+* `callback`
 
 
-##### `deleteVersion` (ObjectId:id, Function:callback)
+**Returns:**
+
+* `Model`: this
+
+
+
+
+##### `deleteVersion` (ObjectId:id, Function:callback) -> undefined
 
 (@model).deleteVersion
 
@@ -176,11 +246,21 @@ An object will be passed to the callback function with a
 
 version and false if it did not.
 
+**Parameters:**
+
 * `id`: The Id of the document version to delete
 
+* `callback`
 
 
-##### `activateVersion` (ObjectId:id, Function:callback)
+**Returns:**
+
+* `Model`: this
+
+
+
+
+##### `activateVersion` (ObjectId:id, Function:callback) -> undefined
 
 (@model).activateVersion
 
@@ -192,7 +272,17 @@ by cloning it's data to the original collection and updating the
 
 active version pointer.
 
+**Parameters:**
+
 * `id`: The Id of the version document to activate
+
+* `callback`
+
+
+**Returns:**
+
+* `Model`: this
+
 
 
 

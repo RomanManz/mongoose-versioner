@@ -27,6 +27,6 @@
   },
   "licence": "MIT",
   "devDependencies": {
-    "docr": "0.0.3"
+    "docr": "0.0.4"
   }
 }
