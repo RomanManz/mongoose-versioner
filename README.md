@@ -72,10 +72,7 @@ mongoose : require("mongoose")
 
 (@instance).findVersions
 
-
-
 When you have an instance to a document, calling this instance method
-
 will return a list of document versions available for this document.
 
 **Parameters:**
@@ -93,8 +90,6 @@ will return a list of document versions available for this document.
 ##### `findVersionById` (ObjectId:id, Object:fields, Object:options, Function:callback) -> undefined
 
 (@model).findVersionById
-
-
 
 Returns a specific document version by Id
 
@@ -120,10 +115,7 @@ Returns a specific document version by Id
 
 (@model).findVersions
 
-
-
 Returns a collection of document versions that
-
 are linked as to the document with the passed in Id.
 
 **Parameters:**
@@ -148,8 +140,6 @@ are linked as to the document with the passed in Id.
 
 (@model).saveNewVersionOf
 
-
-
 Shorthand to saveVersion
 
 **Parameters:**
@@ -172,46 +162,25 @@ Shorthand to saveVersion
 
 (@model).saveVersion
 
-
-
 **NOTE**: This function should be used to save all documents in place of
-
 the original schema's save() method.
 
-
-
 This function will first check to see if the document exists in
-
 the original schema and create it there if it does not.
 
-
-
 Then, using this document reference, also create a version and store
-
 it in the shadow collection linking it back to this reference.
 
-
-
 **dataObj**
-
 ```js
-
 {
-
   // data that will be stored, model
-
   data: data,
-
   // null - to create a new version
-
   // ObjectId - overwrite given version
-
   versionId: null,
-
   versionOfId: original_doc._id
-
 }
-
 ```
 
 **Parameters:**
@@ -232,18 +201,11 @@ it in the shadow collection linking it back to this reference.
 
 (@model).deleteVersion
 
-
-
 This function will delete a document version from the shadow
-
 collection provided it isn't linked as the active document.
 
-
-
 An object will be passed to the callback function with a
-
 'success' property with the value true if it deleted the
-
 version and false if it did not.
 
 **Parameters:**
@@ -264,12 +226,8 @@ version and false if it did not.
 
 (@model).activateVersion
 
-
-
 This function will set a document version as the active version
-
 by cloning it's data to the original collection and updating the
-
 active version pointer.
 
 **Parameters:**
