@@ -201,7 +201,7 @@ module.exports = function (schema, options) {
                   // 4a) Copy all of the properties from the Version to the Active document
                   var versDocObj = versSaved.toObject();
                   for (var key in versDocObj) {
-                    if (key !== '_id' && key !== versionOfIdPath) {
+                    if (key !== '_id' && key !== versionOfIdPath && key !== schema.options.versionKey) {
                       original[key] = versDocObj[key];
                     }
                   }
@@ -305,7 +305,7 @@ module.exports = function (schema, options) {
             // 3) Copy all of the properties from the Version to the Active document
             var versDocObj = result.toObject();
             for (var key in versDocObj) {
-              if (key !== '_id' && key !== versionOfIdPath) {
+              if (key !== '_id' && key !== versionOfIdPath && key !== schema.options.versionKey) {
                 active[key] = versDocObj[key];
               }
             }
