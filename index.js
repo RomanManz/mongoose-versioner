@@ -319,4 +319,85 @@ module.exports = function (schema, options) {
       }
     });
   };
+
+  /**
+   * upsertVersion
+   *
+   * NOTE: This function should be used to save all documents in place of
+   * the original schema's save() method.
+   *
+   * This function is a lightweight version of saveVersion to be used in 
+   * append-only situations when the application logic does not cater for 
+   * modifying not-active i.e. previous versions.
+   *
+   * If dataObj's _id is null i.e. undefined it creates a new document
+   * if _id exists it uses findAndModify to ensure that the active version
+   * gets modified. An attempt to modify a not-active version of a document
+   * will result in an error.
+   * In both cases (save or findAndModify) a new shadow document is created.
+   *
+   * @param {Object} dataObj    The data to save
+   * @param {Function} callback
+   */
+  schema.statics.upsertVersion = function (dataObj, callback) {
+    var model = mongoose.model(modelName);
+
+    function create_shadow(originalObj, callback) {
+			var input = {}, versDoc;
+			if( originalObj instanceof model ) {
+				input = originalObj.toObject();
+			} else {
+				Object.keys(originalObj).forEach(function(key) {
+					if (originalObj.hasOwnProperty(key)) input[key] = originalObj[key];
+				});
+			}
+			delete input._id;
+      var versDoc = new shadowModel(input);
+			versDoc[versionOfIdPath] = originalObj._id.toString();
+			versDoc.save(function(err, versSaved) {
+				if( err ) return callback(err.message || err);
+				callback(undefined, versSaved);
+			});
+		}
+			
+		if( ! dataObj._id ) {
+			// 1) Create a new document
+			var original = new model(dataObj);
+			// 2) Create a new shadow object
+			create_shadow(original, function(err, versSaved) {
+				if( err ) return callback(err.message || err);
+				// 3) Pass the shadow version to the original document and create it
+				original[versionIdPath] = versSaved._id.toString();
+				original.save(function(err, origSaved) {
+					if( err ) {
+						versSaved.remove();
+						return callback(err.message || err);
+					}
+					callback(origSaved);
+				});
+			});
+		} else {
+			// Updating an existing document
+			if( ! dataObj[versionIdPath] ) return callback('Please specify the revision you would like to change.');
+			// 1) Create a new shadow object
+			create_shadow(dataObj, function(err, versSaved) {
+				if( err ) return callback(err.message || err);
+				var query = { _id: dataObj._id.toString() };
+				query[versionIdPath] = dataObj[versionIdPath];
+				dataObj[versionIdPath] = versSaved._id.toString();
+				// 2) Update the original object (if the provided revision match the actual revision)
+				model.findOneAndUpdate(query, dataObj, function(err, origSaved) {
+					if( err ) {
+						versSaved.remove();
+						return callback(err.message || err);
+					}
+					if( ! origSaved ) {
+						versSaved.remove();
+						return callback('Your copy of the data set with revision ' + query[versionIdPath] + ' is not up-to-date, please refresh first, then try again.');
+					}
+					callback(undefined, origSaved);
+				});
+			});
+		}
+	};
 };
