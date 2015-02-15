@@ -29,6 +29,8 @@
  * @param {Schema} schema
  * @param {Object} options
  */
+
+var schemaCache = {}; // Super ugly, please help!
 module.exports = function (schema, options) {
 
   'use strict';
@@ -44,7 +46,69 @@ module.exports = function (schema, options) {
     , fields = {}
     , versionIdPath = options.versionIdPath || 'versionId'
     , shadowFields = {}
-    , versionOfIdPath = options.versionOfIdPath || 'versionOfId';
+    , versionOfIdPath = options.versionOfIdPath || 'versionOfId'
+    , versionVirtualPath = options.versionVirtualPath || 'versionVirtual'
+    , hookWanted = options.hookWanted
+		, hookVirtual
+		, hookShadowModel
+		,	model;
+
+  //-------------------------------------------------------------------------
+  // Middleware
+  //
+
+	/*
+   * This is the attempt to provide a upsertVersion on document level using pre-save and post-save hooks.
+   * The concept is the same as in the static upsertVersion function.
+   * The only caveat is the fact that upon failure of storing the shadowDoc there is no way of returning an error.
+ 	*/
+	if( hookWanted ) {
+		hookShadowModel = schemaCache[modelName];
+    model = mongoose.model(modelName);
+		hookVirtual = schema.virtual(versionVirtualPath);
+		hookVirtual.getters.push(function() {
+			return this['_' + versionVirtualPath];
+		});
+		hookVirtual.getters.push(function(versDoc) {
+			this['_' + versionVirtualPath] = versDoc;
+		});
+		schema.pre('save', function(next) {
+			var origDoc = this, input = this.toObject(), fields = {}, shadowDoc;
+			// 1) Check if we are current
+			fields[versionIdPath] = 1;
+			model.findById(this._id, fields, function(err, origSaved) {
+				if( err ) {
+					return next(err.message ? err : new Error(err));
+				}
+				if( origSaved && ( ! origDoc[versionIdPath] || origDoc[versionIdPath].toString() !== origSaved[versionIdPath].toString() ) ) {
+					return next(new Error('Your copy of the data set with revision ' + origDoc[versionIdPath] + ' is not up-to-date, please refresh first, then try again.'));
+				}
+				// 2) Create the shadow document
+				delete input._id;
+				delete input[versionIdPath];
+				if( schema.options.versionKey ) delete input[schema.options.versionKey];
+				input[versionOfIdPath] = origDoc._id.toString();
+				shadowDoc = new hookShadowModel(input); // the shadow doc needs to be fully fleshed to meet all Schema requirements
+				origDoc[versionIdPath] = shadowDoc._id.toString();
+				origDoc[versionVirtualPath] = shadowDoc;
+				next();
+			});
+		});
+		schema.post('save', function() {
+			// 3) Update the shadow document's values and save it
+			var input = this.toObject(), shadowDoc = this[versionVirtualPath];
+      for (var key in input) {
+        if (key !== '_id' && key !== versionOfIdPath && key !== schema.options.versionKey) {
+          shadowDoc[key] = input[key];
+        }
+      }
+			shadowDoc.save(function(err, versSaved) {
+				// Or better throw an Error here?
+				if( err ) console.error('Error saving the version document: ' + ( err.message || err ));
+			});
+		});
+		return;
+	}
 
   // Clone the schema to a shadowSchema
   schema.eachPath(function (key, value) {
@@ -66,6 +130,8 @@ module.exports = function (schema, options) {
 
   var shadowSchema = new mongoose.Schema(shadowFields),
     shadowModel = mongoose.model(modelName + 'Shadow', shadowSchema);
+
+	schemaCache[modelName] = shadowModel;
 
   //-------------------------------------------------------------------------
   // Instance Methods
@@ -348,7 +414,7 @@ module.exports = function (schema, options) {
 				input = originalObj.toObject();
 			} else {
 				Object.keys(originalObj).forEach(function(key) {
-					if (originalObj.hasOwnProperty(key)) input[key] = originalObj[key];
+					input[key] = originalObj[key];
 				});
 			}
 			delete input._id;
@@ -385,7 +451,7 @@ module.exports = function (schema, options) {
 				var query = { _id: dataObj._id.toString() };
 				query[versionIdPath] = dataObj[versionIdPath];
 				dataObj[versionIdPath] = versSaved._id.toString();
-				// 2) Update the original object (if the provided revision match the actual revision)
+				// 2) Update the original object (if the provided revision matches the actual revision)
 				model.findOneAndUpdate(query, dataObj, function(err, origSaved) {
 					if( err ) {
 						versSaved.remove();
@@ -400,4 +466,5 @@ module.exports = function (schema, options) {
 			});
 		}
 	};
+  
 };
