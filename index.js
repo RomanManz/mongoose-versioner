@@ -49,6 +49,7 @@ module.exports = function (schema, options) {
     , versionOfIdPath = options.versionOfIdPath || 'versionOfId'
     , versionVirtualPath = options.versionVirtualPath || 'versionVirtual'
     , hookWanted = options.hookWanted
+    , append_only = options.append_only // 'full' append-only mode, no version check is performed at all, always a new version created
 		, hookVirtual
 		, hookShadowModel
 		,	model;
@@ -74,25 +75,34 @@ module.exports = function (schema, options) {
 		});
 		schema.pre('save', function(next) {
 			var origDoc = this, input = this.toObject(), fields = {}, shadowDoc;
+			delete input._id;
+			delete input[versionIdPath];
+			if( schema.options.versionKey ) delete input[schema.options.versionKey];
 			// 1) Check if we are current
 			fields[versionIdPath] = 1;
-			model.findById(this._id, fields, function(err, origSaved) {
-				if( err ) {
-					return next(err.message ? err : new Error(err));
-				}
-				if( origSaved && ( ! origDoc[versionIdPath] || origDoc[versionIdPath].toString() !== origSaved[versionIdPath].toString() ) ) {
-					return next(new Error('Your copy of the data set with revision ' + origDoc[versionIdPath] + ' is not up-to-date, please refresh first, then try again.'));
-				}
+			if( ! append_only ) {
+				model.findById(this._id, fields, function(err, origSaved) {
+					if( err ) {
+						return next(err.message ? err : new Error(err));
+					}
+					if( origSaved && ( ! origDoc[versionIdPath] || origDoc[versionIdPath].toString() !== origSaved[versionIdPath].toString() ) ) {
+						return next(new Error('Your copy of the data set with revision ' + origDoc[versionIdPath] + ' is not up-to-date, please refresh first, then try again.'));
+					}
+					// 2) Create the shadow document
+					input[versionOfIdPath] = origDoc._id.toString();
+					shadowDoc = new hookShadowModel(input); // the shadow doc needs to be fully fleshed to meet all Schema requirements
+					origDoc[versionIdPath] = shadowDoc._id.toString();
+					origDoc[versionVirtualPath] = shadowDoc;
+					next();
+				});
+			} else {
 				// 2) Create the shadow document
-				delete input._id;
-				delete input[versionIdPath];
-				if( schema.options.versionKey ) delete input[schema.options.versionKey];
 				input[versionOfIdPath] = origDoc._id.toString();
 				shadowDoc = new hookShadowModel(input); // the shadow doc needs to be fully fleshed to meet all Schema requirements
 				origDoc[versionIdPath] = shadowDoc._id.toString();
 				origDoc[versionVirtualPath] = shadowDoc;
 				next();
-			});
+			}
 		});
 		schema.post('save', function() {
 			// 3) Update the shadow document's values and save it
@@ -444,12 +454,12 @@ module.exports = function (schema, options) {
 			});
 		} else {
 			// Updating an existing document
-			if( ! dataObj[versionIdPath] ) return callback('Please specify the revision you would like to change.');
+			if( ! append_only && ! dataObj[versionIdPath] ) return callback('Please specify the revision you would like to change.');
 			// 1) Create a new shadow object
 			create_shadow(dataObj, function(err, versSaved) {
 				if( err ) return callback(err.message || err);
 				var query = { _id: dataObj._id.toString() };
-				query[versionIdPath] = dataObj[versionIdPath];
+				if( ! append_only ) query[versionIdPath] = dataObj[versionIdPath];
 				dataObj[versionIdPath] = versSaved._id.toString();
 				// 2) Update the original object (if the provided revision matches the actual revision)
 				model.findOneAndUpdate(query, dataObj, function(err, origSaved) {
