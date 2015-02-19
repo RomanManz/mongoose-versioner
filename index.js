@@ -21,6 +21,7 @@
  * + findVersions - returns all document versions matching query
  * + saveVersion - saves a document as a version
  * + deleteVersion - deletes a document version
+ * + deleteOriginal - deletes a document and, if append_only is set, stores a new version in the shadow collection with the (optional) deleteFlag set to true
  * + activateVersion - make a document version the active version
  *
  * Property added to the shadow schema:
@@ -52,6 +53,7 @@ module.exports = function (schema, options) {
     , append_only = options.append_only // 'full' append-only mode, no version check is performed at all, always a new version created
 		, hookVirtual
 		, hookShadowModel
+		, deleteFlag = options.delete_flag // this flag gets added to the shadow schema and is set when deleteOriginal is called
 		,	model;
 
   //-------------------------------------------------------------------------
@@ -131,6 +133,9 @@ module.exports = function (schema, options) {
   if (!shadowFields[versionOfIdPath]) {
     shadowFields[versionOfIdPath] = {type:Schema.ObjectId};
   }
+	if( deleteFlag && ! shadowFields[deleteFlag] ) {
+    shadowFields[deleteFlag] = {type:Boolean};
+	}
 
   // versionId holds a reference to the versioned document that is "active"
   if (!schema.paths[versionIdPath]) {
@@ -477,4 +482,66 @@ module.exports = function (schema, options) {
 		}
 	};
   
+  /**
+   * deleteOriginal
+   *
+   * This function can be used to delete a document but leave the shadow versions intact
+   * optionally setting a delete flag on the active version (i.e. create a new one in append_only mode)
+   *
+   * @param {Object} dataObj    In fact a query object (including versionIdPath unless append_only)
+   * @param {Function} callback
+   */
+  schema.statics.deleteOriginal = function (dataObj, callback) {
+    var model = mongoose.model(modelName);
+
+		if( ! append_only && ! dataObj[versionIdPath] ) return callback('Please specify the revision you would like to change.');
+		// 1) Retrieve the original
+		model.find(dataObj, function(err, origs) {
+if( err ) console.error('error ' + err.stack);
+			if( err ) return callback(err.message || err);
+			if( ! origs || ! origs.length ) return callback('Your copy of the data set with revision ' + dataObj[versionIdPath] + ' is not up-to-date, please refresh first, then try again.');
+			if( origs.length > 1 ) return callback('Cannot delete more than one document.');
+			var origSaved = origs[0],
+				origObj = origSaved.toObject();
+			origObj[versionOfIdPath] = origObj._id.toString();
+			delete origObj._id;
+			delete origObj[versionIdPath];
+			if( schema.options.versionKey ) delete origObj[schema.options.versionKey];
+			if( deleteFlag ) origObj[deleteFlag] = true;
+			// 2) Create the new version i.e. update the existing one
+			if( append_only ) {
+      	var versDoc = new shadowModel(origObj);
+				versDoc.save(function(err, versSaved) {
+					if( err ) return callback('Error creating version document: ' + ( err.message || err ));
+					// 3) Delete original
+					model.remove({ _id: origSaved._id.toString() }, function(err) {
+						if( err ) {
+							versSaved.remove();
+							return callback('Error deleting document: ' + ( err.message || err ));
+						}
+						callback();
+					});
+				});
+			} else if( deleteFlag ) {
+				var query = { _id: dataObj[versionIdPath] },
+					data = {};
+				data[deleteFlag] = true;
+				shadowModel.findOneAndUpdate(query, data , function(err, savedVersion) {
+					if( err ) return callback('Error creating version document: ' + ( err.message || err ));
+					if( ! savedVersion ) return callback('Your version documents are inconsistent.');
+					// 3) Delete original
+					model.remove({ _id: origSaved._id.toString() }, function(err) {
+						if( err ) {
+							versSaved.remove();
+							return callback('Error deleting document: ' + ( err.message || err ));
+						}
+						callback();
+					});
+				});
+			} else {
+				// Nothing to do
+				callback('Do not know what to do, both append_only and delete_flag are not set.');
+			}
+		});
+	};
 };
