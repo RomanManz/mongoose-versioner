@@ -530,14 +530,12 @@ if( err ) console.error('error ' + err.stack);
 				shadowDoc = new shadowModel(input); // the shadow doc needs to be fully fleshed to meet all Schema requirements
 				origDoc[versionIdPath] = shadowDoc._id.toString();
 				origDoc[versionVirtualPath] = shadowDoc;
-console.error('saved shadow doc: ' + JSON.stringify(shadowDoc) + '...');
 				next();
 			}
 		});
 		schema.post('save', function() {
 			// 3) Update the shadow document's values and save it
 			var input = this.toObject(), shadowDoc = this[versionVirtualPath];
-console.error('restored shadow doc: ' + JSON.stringify(shadowDoc) + '...');
       for (var key in input) {
         if (key !== '_id' && key !== versionOfIdPath && key !== schema.options.versionKey) {
           shadowDoc[key] = input[key];
