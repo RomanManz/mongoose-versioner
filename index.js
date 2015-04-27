@@ -383,7 +383,7 @@ module.exports = function (schema, options) {
 						versSaved.remove();
 						return callback(err.message || err);
 					}
-					callback(origSaved);
+					callback(undefined, origSaved);
 				});
 			});
 		} else {
