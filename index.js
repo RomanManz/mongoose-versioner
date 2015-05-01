@@ -51,7 +51,12 @@ module.exports = function (schema, options) {
     , hookWanted = options.hookWanted
     , append_only = options.append_only // 'full' append-only mode, no version check is performed at all, always a new version created
 		, hookVirtual
-		, deleteFlag = options.delete_flag; // this flag gets added to the shadow schema and is set when deleteOriginal is called
+		, deleteFlag = options.delete_flag // this flag gets added to the shadow schema and is set when deleteOriginal is called
+		// the collection flag is used to specify the collection name, which can be useful in combination with discriminators
+		, collection = options.collection
+		, schema_options = {};
+
+	if( collection ) schema_options.collection = collection;
 
   // Clone the schema to a shadowSchema
   schema.eachPath(function (key, value) {
@@ -74,7 +79,7 @@ module.exports = function (schema, options) {
   }
   schema.add(fields);
 
-  var shadowSchema = new mongoose.Schema(shadowFields),
+  var shadowSchema = new mongoose.Schema(shadowFields, schema_options),
     shadowModel = mongoose.model(modelName + 'Shadow', shadowSchema);
 
   //-------------------------------------------------------------------------
