@@ -383,12 +383,12 @@ module.exports = function (schema, options) {
 				if( err ) return callback(err.message || err);
 				// 3) Pass the shadow version to the original document and create it
 				original[versionIdPath] = versSaved._id.toString();
-				original.save(function(err, origSaved) {
+				model.update( { _id: original._id }, original, { upsert: true, overwrite: true }, function(err) {
 					if( err ) {
 						versSaved.remove();
 						return callback(err.message || err);
 					}
-					callback(undefined, origSaved);
+					callback(undefined, original);
 				});
 			});
 		} else {
