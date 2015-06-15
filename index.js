@@ -212,7 +212,7 @@ module.exports = function (schema, options) {
                   original[versionIdPath] = versSaved._id;
                 }
                 // 4) If the Active version is the Version we are editing, then update it
-                if (original[versionIdPath].toString() == versSaved._id.toString()) {
+                if (original[versionIdPath] && original[versionIdPath].toString() == versSaved._id.toString()) {
                   // 4a) Copy all of the properties from the Version to the Active document
                   var versDocObj = versSaved.toObject();
                   for (var key in versDocObj) {
