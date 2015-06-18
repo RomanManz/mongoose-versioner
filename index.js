@@ -231,7 +231,7 @@ module.exports = function (schema, options) {
                       // 5) If this was a new document save Version again with ref to Active document
                       versSaved[versionOfIdPath] = originalSaved._id;
                       versSaved.save(function (err, versSavedAgain) {
-                        callback(err, versSavedAgain);
+                        callback(err, originalSaved);
                       });
                     } else {
                       callback(null, originalSaved); // Return original version modified
