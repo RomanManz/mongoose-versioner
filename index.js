@@ -350,12 +350,22 @@ module.exports = function (schema, options) {
    * gets modified. An attempt to modify a not-active version of a document
    * will result in an error.
    * In both cases (save or findAndModify) a new shadow document is created.
+	 *
+	 * The optional query object has been added to support atomicity in create
+	 * mode, so when no object id is present. An example use case is to compute
+	 * a check sum of the relevant fields of the document which is the used
+	 * in the findOneAndModify call which replaced the update().
    *
    * @param {Object} dataObj    The data to save
+	 * @param {Object} query      Optional query object
    * @param {Function} callback
    */
-  schema.statics.upsertVersion = function (dataObj, callback) {
+  schema.statics.upsertVersion = function (dataObj, query, callback) {
     var model = mongoose.model(modelName);
+		if( ! callback ) {
+			callback = query;
+			query = null;
+		}
 
     function create_shadow(originalObj, callback) {
 			var input = {}, versDoc;
@@ -370,7 +380,7 @@ module.exports = function (schema, options) {
       var versDoc = new shadowModel(input);
 			versDoc[versionOfIdPath] = originalObj._id.toString();
 			versDoc.save(function(err, versSaved) {
-				if( err ) return callback(err.message || err);
+				if( err ) return callback(err);
 				callback(undefined, versSaved);
 			});
 		}
@@ -380,23 +390,27 @@ module.exports = function (schema, options) {
 			var original = new model(dataObj);
 			// 2) Create a new shadow object
 			create_shadow(original, function(err, versSaved) {
-				if( err ) return callback(err.message || err);
+				if( err ) return callback(err);
 				// 3) Pass the shadow version to the original document and create it
 				original[versionIdPath] = versSaved._id.toString();
-				model.update( { _id: original._id }, original, { upsert: true, overwrite: true }, function(err) {
+				model.findOneAndUpdate( query || { _id: original._id }, { $setOnInsert: original }, { upsert: true, new: false }, function(err, doc) {
 					if( err ) {
 						versSaved.remove();
-						return callback(err.message || err);
+						return callback(err);
 					}
-					callback(undefined, original);
+					// With new = false above doc will be null if a new document was inserted.
+					// If doc is not null the insert did not take place because of the $setOnInsert above,
+					// so the version document should be removed again.
+					if( doc ) versSaved.remove();
+					callback(undefined, doc || original);
 				});
 			});
 		} else {
 			// Updating an existing document
-			if( ! append_only && ! dataObj[versionIdPath] ) return callback('Please specify the revision you would like to change.');
+			if( ! append_only && ! dataObj[versionIdPath] ) return callback(new Error('Please specify the revision you would like to change.'));
 			// 1) Create a new shadow object
 			create_shadow(dataObj, function(err, versSaved) {
-				if( err ) return callback(err.message || err);
+				if( err ) return callback(err);
 				var query = { _id: dataObj._id.toString() };
 				if( ! append_only ) query[versionIdPath] = dataObj[versionIdPath];
 				dataObj[versionIdPath] = versSaved._id.toString();
@@ -404,11 +418,11 @@ module.exports = function (schema, options) {
 				model.findOneAndUpdate(query, dataObj, function(err, origSaved) {
 					if( err ) {
 						versSaved.remove();
-						return callback(err.message || err);
+						return callback(err);
 					}
 					if( ! origSaved ) {
 						versSaved.remove();
-						return callback('Your copy of the data set with revision ' + query[versionIdPath] + ' is not up-to-date, please refresh first, then try again.');
+						return callback(new Error('Your copy of the data set with revision ' + query[versionIdPath] + ' is not up-to-date, please refresh first, then try again.'));
 					}
 					callback(undefined, origSaved);
 				});
@@ -436,10 +450,9 @@ module.exports = function (schema, options) {
 		if( ! append_only && ! queryObj[versionIdPath] ) return callback('Please specify the revision you would like to change.');
 		// 1) Retrieve the original
 		model.find(queryObj, function(err, origs) {
-if( err ) console.error('error ' + err.stack);
-			if( err ) return callback(err.message || err);
-			if( ! origs || ! origs.length ) return callback('Your copy of the data set with revision ' + queryObj[versionIdPath] + ' is not up-to-date, please refresh first, then try again.');
-			if( origs.length > 1 ) return callback('Cannot delete more than one document.');
+			if( err ) return callback(err);
+			if( ! origs || ! origs.length ) return callback(new Error('Your copy of the data set with revision ' + queryObj[versionIdPath] + ' is not up-to-date, please refresh first, then try again.'));
+			if( origs.length > 1 ) return callback(new Error('Cannot delete more than one document.'));
 			var origSaved = origs[0],
 				origObj = origSaved.toObject();
 			origObj[versionOfIdPath] = origObj._id.toString();
@@ -456,12 +469,12 @@ if( err ) console.error('error ' + err.stack);
 			if( append_only ) {
       	var versDoc = new shadowModel(origObj);
 				versDoc.save(function(err, versSaved) {
-					if( err ) return callback('Error creating version document: ' + ( err.message || err ));
+					if( err ) return callback(err);
 					// 3) Delete original
 					model.remove({ _id: origSaved._id.toString() }, function(err) {
 						if( err ) {
 							versSaved.remove();
-							return callback('Error deleting document: ' + ( err.message || err ));
+							return callback(err);
 						}
 						callback();
 					});
@@ -471,20 +484,20 @@ if( err ) console.error('error ' + err.stack);
 					data = {};
 				data[deleteFlag] = true;
 				shadowModel.findOneAndUpdate(query, data , function(err, savedVersion) {
-					if( err ) return callback('Error creating version document: ' + ( err.message || err ));
-					if( ! savedVersion ) return callback('Your version documents are inconsistent.');
+					if( err ) return callback(err);
+					if( ! savedVersion ) return callback(new Error('Your version documents are inconsistent.'));
 					// 3) Delete original
 					model.remove({ _id: origSaved._id.toString() }, function(err) {
 						if( err ) {
 							versSaved.remove();
-							return callback('Error deleting document: ' + ( err.message || err ));
+							return callback(err);
 						}
 						callback();
 					});
 				});
 			} else {
 				// Nothing to do
-				callback('Do not know what to do, both append_only and delete_flag are not set.');
+				callback(new Error('Do not know what to do, both append_only and delete_flag are not set.'));
 			}
 		});
 	};
