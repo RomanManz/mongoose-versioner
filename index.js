@@ -401,8 +401,13 @@ module.exports = function (schema, options) {
 					// With new = false above doc will be null if a new document was inserted.
 					// If doc is not null the insert did not take place because of the $setOnInsert above,
 					// so the version document should be removed again.
-					if( doc ) versSaved.remove();
-					callback(undefined, doc || original);
+					if( doc ) {
+						versSaved.remove();
+						var error = new Error('The document already exists with id ' + doc._id + '.');
+						error.name = 'DuplicationError';
+						return callback(error);
+					}
+					callback(undefined, original);
 				});
 			});
 		} else {
