@@ -361,7 +361,8 @@ module.exports = function (schema, options) {
    * @param {Function} callback
    */
   schema.statics.upsertVersion = function (dataObj, query, callback) {
-    var model = mongoose.model(modelName);
+    var model = mongoose.model(modelName),
+			options = {};
 		if( ! callback ) {
 			callback = query;
 			query = null;
@@ -412,15 +413,20 @@ module.exports = function (schema, options) {
 			});
 		} else {
 			// Updating an existing document
-			if( ! append_only && ! dataObj[versionIdPath] ) return callback(new Error('Please specify the revision you would like to change.'));
+			// Or if isNew, creating a brand new which also does not require a versionId (since there is none yet)
+			if( ! dataObj.isNew && ! append_only && ! dataObj[versionIdPath] ) return callback(new Error('Please specify the revision you would like to change.'));
 			// 1) Create a new shadow object
 			create_shadow(dataObj, function(err, versSaved) {
 				if( err ) return callback(err);
 				var query = { _id: dataObj._id.toString() };
-				if( ! append_only ) query[versionIdPath] = dataObj[versionIdPath];
+				if( ! dataObj.isNew && ! append_only ) query[versionIdPath] = dataObj[versionIdPath];
+				if( dataObj.isNew ) {
+					dataObj = dataObj.toObject(); // findOneAndUpdate() won't work with a mongoose object
+					options.upsert = true;
+				}
 				dataObj[versionIdPath] = versSaved._id.toString();
 				// 2) Update the original object (if the provided revision matches the actual revision)
-				model.findOneAndUpdate(query, dataObj, function(err, origSaved) {
+				model.findOneAndUpdate(query, dataObj, options, function(err, origSaved) {
 					if( err ) {
 						versSaved.remove();
 						return callback(err);
@@ -481,7 +487,7 @@ module.exports = function (schema, options) {
 							versSaved.remove();
 							return callback(err);
 						}
-						callback();
+						callback(null, origSaved);
 					});
 				});
 			} else if( deleteFlag ) {
@@ -497,7 +503,7 @@ module.exports = function (schema, options) {
 							versSaved.remove();
 							return callback(err);
 						}
-						callback();
+						callback(null, origSaved);
 					});
 				});
 			} else {
