@@ -575,6 +575,42 @@ module.exports = function (schema, options) {
 				if( err ) console.error('Error saving the version document: ' + ( err.message || err ));
 			});
 		});
+		schema.pre('remove', function(next) {
+			var origDoc = this, input = this.toObject(), fields = {}, shadowDoc,
+    		model = mongoose.model(modelName);
+			delete input._id;
+			delete input[versionIdPath];
+			if( schema.options.versionKey ) delete input[schema.options.versionKey];
+			// 1) Check if we are current
+			fields[versionIdPath] = 1;
+			if( ! append_only ) {
+				model.findById(this._id, fields, function(err, origSaved) {
+					if( err ) {
+						return next(err.message ? err : new Error(err));
+					}
+					if( origSaved && ( ! origDoc[versionIdPath] || origDoc[versionIdPath].toString() !== origSaved[versionIdPath].toString() ) ) {
+						return next(new Error('Your copy of the data set with revision ' + origDoc[versionIdPath] + ' is not up-to-date, please refresh first, then try again.'));
+					}
+					// 2) Create the shadow document
+					input[versionOfIdPath] = origDoc._id.toString();
+					shadowDoc = new shadowModel(input); // the shadow doc needs to be fully fleshed to meet all Schema requirements
+					if( deleteFlag ) shadowDoc[deleteFlag] = true;
+					shadowDoc.save(function(err, versSaved) {
+						if( err ) return next(err);
+						next();
+					});
+				});
+			} else {
+				// 2) Create the shadow document
+				input[versionOfIdPath] = origDoc._id.toString();
+				shadowDoc = new shadowModel(input); // the shadow doc needs to be fully fleshed to meet all Schema requirements
+				if( deleteFlag ) shadowDoc[deleteFlag] = true;
+				shadowDoc.save(function(err, versSaved) {
+					if( err ) return next(err);
+					next();
+				});
+			}
+		});
 	}
 
 };
