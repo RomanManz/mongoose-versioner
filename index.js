@@ -186,11 +186,13 @@ module.exports = function (schema, options) {
         var versDoc = result;
         if (versDoc === null) {
           // Document doesn't exist so create a new one
+          delete dataObj.data._id;
           versDoc = new shadowModel(dataObj.data);
         } else {
           // Document does exist so copy data to it
           for (var key in dataObj.data) {
-            versDoc[key] = dataObj.data[key];
+            if(key !== '_id')
+              versDoc[key] = dataObj.data[key];
           }
         }
         versDoc.versionOfId = dataObj.versionOfId || null;
@@ -210,7 +212,8 @@ module.exports = function (schema, options) {
                 if (original === null) {
                   original = new model();
                   original[versionIdPath] = versSaved._id;
-                }
+                } else if(!original[versionIdPath] || dataObj.versionId == null) // Create a new version
+		  original[versionIdPath] = versSaved._id;
                 // 4) If the Active version is the Version we are editing, then update it
                 if (original[versionIdPath].toString() == versSaved._id.toString()) {
                   // 4a) Copy all of the properties from the Version to the Active document
@@ -228,14 +231,14 @@ module.exports = function (schema, options) {
                       // 5) If this was a new document save Version again with ref to Active document
                       versSaved[versionOfIdPath] = originalSaved._id;
                       versSaved.save(function (err, versSavedAgain) {
-                        callback(err, versSavedAgain);
+                        callback(err, originalSaved);
                       });
                     } else {
-                      callback(null, versSaved);
+                      callback(null, originalSaved); // Return original version modified
                     }
                   });
                 } else {
-                  callback(null, versSaved);
+                  callback(null, originalSaved); // Return original version
                 }
               }
             });
